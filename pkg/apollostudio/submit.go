@@ -15,7 +15,7 @@ type SubmitOptions struct {
 	SubGraphSchema []byte
 }
 
-func (c *Client) SubmitSubGraph(ctx context.Context, opts *SubmitOptions) (bool, error) {
+func (c *Client) SubmitSubGraph(ctx context.Context, opts *SubmitOptions) error {
 	type Mutation struct {
 		Graph struct {
 			PublishSubgraph struct {
@@ -46,13 +46,13 @@ func (c *Client) SubmitSubGraph(ctx context.Context, opts *SubmitOptions) (bool,
 
 	err := c.gqlClient.Mutate(ctx, &mutation, vars)
 	if err != nil {
-		return false, fmt.Errorf("failed to query apollo studio %v", err.Error())
+		return fmt.Errorf("failed to query apollo studio %v", err.Error())
 	}
 
 	errors := mutation.Graph.PublishSubgraph.Errors
 	if len(errors) > 0 {
-		return false, &OperationError{"failed to submit schema", errors}
+		return &OperationError{"failed to submit schema", errors}
 	}
 
-	return true, nil
+	return nil
 }

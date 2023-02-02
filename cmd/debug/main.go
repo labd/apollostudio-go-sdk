@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
 	"os"
@@ -9,6 +10,15 @@ import (
 	"github.com/joho/godotenv"
 	"github.com/labd/go-apollostudio-sdk/pkg/apollostudio"
 )
+
+func handleErr(err error) {
+	var opErr *apollostudio.OperationError
+	if errors.As(err, &opErr) {
+		opErr.Print()
+		os.Exit(1)
+	}
+	log.Fatal(err)
+}
 
 func main() {
 	godotenv.Load()
@@ -31,7 +41,7 @@ func main() {
 	})
 
 	if err != nil {
-		log.Fatal(err)
+		handleErr(err)
 	}
 
 	if !valid {
@@ -40,13 +50,14 @@ func main() {
 		return
 	}
 
-	submits, err := client.SubmitSubGraph(ctx, &apollostudio.SubmitOptions{
+	if err := client.SubmitSubGraph(ctx, &apollostudio.SubmitOptions{
 		SchemaID:       schemaId,
 		SchemaVariant:  schemaVariant,
 		SubGraphName:   subGraphName,
 		SubGraphSchema: []byte(subGraphSchema),
-	})
+	}); err != nil {
+		handleErr(err)
+	}
 
-	fmt.Println(submits, err)
-
+	fmt.Println("schema submitted")
 }

@@ -62,6 +62,7 @@ func (c *Client) submitSubgraphCheck(ctx context.Context, opts *ValidateOptions)
 
 	workflowId := mutation.Graph.Variant.SubmitSubgraphCheckAsync.CheckRequestSuccess.WorkflowID
 	if workflowId == nil {
+		// TODO: pass some more details using smth like OperationError?
 		return "", fmt.Errorf("could not create check workflow in apollo studio")
 	}
 	return *workflowId, nil
@@ -130,12 +131,10 @@ func (c *Client) checkWorkflow(ctx context.Context, opts *ValidateOptions, workf
 
 // ValidateSubGraph submits the proposed schema and returns the result of the async workflow.
 //
-// TODO: determine if we want to return more information about why
-// the validation failed. Passign false, error is not reasonable here
-// because there was no error, only a negative result.
-// If we want to return more info we coudl either:
-// return false, &SomeDetails{}, nil
-// return ValidationResult{}, nil <== probably better
+// TODO: determine most idiomatic way to return validation results.
+//  1. (bool, error) simple but too little information (just a bool)
+//  2. (*ValidationResult, error) separates true errors from validation
+//  3. (error) can let error be a custom ValidationEror but requires errors.Is/As checking.
 func (c *Client) ValidateSubGraph(ctx context.Context, opts *ValidateOptions) (bool, error) {
 	workflowId, err := c.submitSubgraphCheck(ctx, opts)
 	if err != nil {

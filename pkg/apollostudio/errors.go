@@ -19,3 +19,11 @@ type OperationError struct {
 func (e *OperationError) Error() string {
 	return fmt.Sprintf("%s (%d apollo errors)", e.Message, len(e.ApolloErrors))
 }
+
+func (e *OperationError) Print() {
+	fmt.Println(e.Error())
+	fmt.Println("Apollo errors:")
+	for i, error := range e.ApolloErrors {
+		fmt.Printf("#%d: code: %s, message: %s\n", i, error.Code, error.Message)
+	}
+}
