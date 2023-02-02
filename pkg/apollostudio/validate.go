@@ -8,6 +8,14 @@ import (
 	"github.com/hasura/go-graphql-client"
 )
 
+type ValidateOptions struct {
+	SchemaID       string
+	SchemaVariant  string
+	APIKey         string
+	SubGraphName   string
+	SubGraphSchema []byte
+}
+
 // submitSubgraphCheck submits the proposed schema and returns a workflow id.
 func (c *Client) submitSubgraphCheck(ctx context.Context, opts *ValidateOptions) (string, error) {
 	type Mutation struct {

@@ -7,6 +7,14 @@ import (
 	"github.com/hasura/go-graphql-client"
 )
 
+type SubmitOptions struct {
+	SchemaID       string
+	SchemaVariant  string
+	APIKey         string
+	SubGraphName   string
+	SubGraphSchema []byte
+}
+
 func (c *Client) SubmitSubGraph(ctx context.Context, opts *SubmitOptions) (bool, error) {
 	type Mutation struct {
 		Graph struct {

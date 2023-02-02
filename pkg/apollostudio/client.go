@@ -13,22 +13,6 @@ type Client struct {
 	body       string
 }
 
-type ValidateOptions struct {
-	SchemaID       string
-	SchemaVariant  string
-	APIKey         string
-	SubGraphName   string
-	SubGraphSchema []byte
-}
-
-type SubmitOptions struct {
-	SchemaID       string
-	SchemaVariant  string
-	APIKey         string
-	SubGraphName   string
-	SubGraphSchema []byte
-}
-
 type ClientOpts struct {
 	APIKey string
 }
