@@ -59,6 +59,10 @@ type GitContextInput struct {
 	RemoteUrl *string `json:"remoteUrl"`
 }
 
+type PartialSchemaInput struct {
+	Sdl string `json:"sdl"`
+}
+
 type SubgraphCheckAsyncInput struct {
 	Config                HistoricQueryParametersInput `json:"config"`
 	GitContext            GitContextInput              `json:"gitContext"`
@@ -186,29 +190,34 @@ func (c *Client) ValidateSubGraph(ctx context.Context, opts *ValidateOptions) (b
 
 }
 
-func (c *Client) SubmitGraph(ctx context.Context, opts *SubmitOptions) (bool, error) {
+func (c *Client) SubmitSubGraph(ctx context.Context, opts *SubmitOptions) (bool, error) {
 	var uploadSchemaMutation struct {
 		Graph struct {
 			PublishSubgraph struct {
-				Errors []struct {
+				CompositionConfig struct {
+					SchemaHash string
+				}
+				LaunchUrl     string
+				LaunchCliCopy string
+				Errors        []struct {
 					Message string
 					Code    string
 				}
-			} `grapqhl:"publishSubGraph(name: $subgraph, url: $url, revision: $revision, activePartialSchema: $schema, graphVariant: $variant, gitContext: $git_context)"`
+				UpdatedGateway bool
+				WasCreated     bool
+			} `graphql:"publishSubgraph(name: $subgraph, graphVariant: $variant, revision: $revision, activePartialSchema: $schema, gitContext: $git_context)"`
 		} `graphql:"graph(id: $graph_id)"`
 	}
 
 	uploadSchemaVariables := map[string]interface{}{
 		"graph_id": graphql.ID(opts.SchemaID),
-		"name":     graphql.String(opts.SubGraphName),
-		"input": SubgraphCheckAsyncInput{
-			Config:         HistoricQueryParametersInput{},
-			GitContext:     GitContextInput{},
-			GraphRef:       fmt.Sprintf("%s@%s", opts.SchemaID, opts.SchemaVariant),
-			IsSandbox:      false,
-			ProposedSchema: string(opts.SubGraphSchema),
-			SubgraphName:   opts.SubGraphName,
+		"subgraph": graphql.String(opts.SubGraphName),
+		"variant":  graphql.String(opts.SchemaVariant),
+		"revision": graphql.String(""),
+		"schema": PartialSchemaInput{
+			Sdl: string(opts.SubGraphSchema),
 		},
+		"git_context": GitContextInput{},
 	}
 
 	checkErr := c.graphqlClient.Mutate(context.Background(), &uploadSchemaMutation, uploadSchemaVariables)
@@ -216,5 +225,11 @@ func (c *Client) SubmitGraph(ctx context.Context, opts *SubmitOptions) (bool, er
 		return false, fmt.Errorf("failed to query apollo studio %v", checkErr.Error())
 	}
 
-	return false, nil
+	submitErr := uploadSchemaMutation.Graph.PublishSubgraph.Errors
+	hasErr := len(submitErr) > 0
+	if hasErr {
+		return false, fmt.Errorf("failed to submit schema %v", submitErr)
+	}
+
+	return true, nil
 }

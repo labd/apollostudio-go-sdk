@@ -26,19 +26,22 @@ func main() {
 
 	client := apollostudio.NewClient(cfg)
 
-	validates, err := client.ValidateSubGraph(ctx, &apollostudio.ValidateOptions{
+	_, err := client.ValidateSubGraph(ctx, &apollostudio.ValidateOptions{
 		SchemaID:       schemaId,
 		SchemaVariant:  schemaVariant,
 		SubGraphSchema: []byte(subGraphSchema),
 		SubGraphName:   subGraphName,
 	})
 
-	fmt.Println(validates, err)
+	// fmt.Println(validates, err)
 
-	// validates, err := client.SubmitGraph(ctx, &apollo.SubmitOptions{
-	// 	SchemaID:      "1",
-	// 	SchemaVariant: "2",
-	// 	SchemaBody:    []byte("foo"),
-	// })
+	submits, err := client.SubmitSubGraph(ctx, &apollostudio.SubmitOptions{
+		SchemaID:       schemaId,
+		SchemaVariant:  schemaVariant,
+		SubGraphName:   subGraphName,
+		SubGraphSchema: []byte(subGraphSchema),
+	})
+
+	fmt.Println(submits, err)
 
 }
