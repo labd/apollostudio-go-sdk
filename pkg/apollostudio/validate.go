@@ -116,7 +116,7 @@ func (c *Client) checkWorkflow(ctx context.Context, opts *ValidateOptions, workf
 
 		switch status {
 		case "FAILED":
-			// TODO: pretty print (JSON maybe)
+			// TODO: see if OperationError can be used here too.
 			return false, fmt.Errorf("Subgraph check failed %v", workflow)
 		case "PASSED":
 			return true, nil

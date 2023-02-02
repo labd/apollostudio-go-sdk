@@ -22,13 +22,9 @@ func (c *Client) SubmitSubGraph(ctx context.Context, opts *SubmitOptions) (bool,
 				CompositionConfig struct {
 					SchemaHash string
 				}
-				LaunchUrl     string
-				LaunchCliCopy string
-				// TODO: make error a type so we can re-use when returning collected errors
-				Errors []struct {
-					Message string
-					Code    string
-				}
+				LaunchUrl      string
+				LaunchCliCopy  string
+				Errors         []ApolloError
 				UpdatedGateway bool
 				WasCreated     bool
 			} `graphql:"publishSubgraph(name: $subgraph, graphVariant: $variant, revision: $revision, activePartialSchema: $schema, gitContext: $git_context)"`
@@ -55,8 +51,7 @@ func (c *Client) SubmitSubGraph(ctx context.Context, opts *SubmitOptions) (bool,
 
 	errors := mutation.Graph.PublishSubgraph.Errors
 	if len(errors) > 0 {
-		// TODO: make new error struct that contians "gqlErrors" or so
-		return false, fmt.Errorf("failed to submit schema %v", errors)
+		return false, &OperationError{"failed to submit schema", errors}
 	}
 
 	return true, nil
