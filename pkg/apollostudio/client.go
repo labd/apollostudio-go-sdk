@@ -22,7 +22,10 @@ func NewClient(opts ClientOpts) *Client {
 		APIKey: opts.APIKey,
 	}}
 
-	gqlClient := graphql.NewClient("https://graphql.api.apollographql.com/api/graphql", &httpClient)
+	gqlClient := graphql.NewClient(
+		"https://graphql.api.apollographql.com/api/graphql",
+		&httpClient,
+	)
 
 	return &Client{
 		gqlClient:  gqlClient,
