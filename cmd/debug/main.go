@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"log"
 	"os"
 
 	"github.com/joho/godotenv"
@@ -22,14 +23,22 @@ func main() {
 
 	client := apollostudio.NewClient(apollostudio.ClientOpts{APIKey: apiKey})
 
-	_, err := client.ValidateSubGraph(ctx, &apollostudio.ValidateOptions{
+	isValid, err := client.ValidateSubGraph(ctx, &apollostudio.ValidateOptions{
 		SchemaID:       schemaId,
 		SchemaVariant:  schemaVariant,
 		SubGraphSchema: []byte(subGraphSchema),
 		SubGraphName:   subGraphName,
 	})
 
-	// fmt.Println(validates, err)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	if !isValid {
+		// TODO: add more info, also see docs ValidateSubGraph.
+		fmt.Println("schema validation failed")
+		return
+	}
 
 	submits, err := client.SubmitSubGraph(ctx, &apollostudio.SubmitOptions{
 		SchemaID:       schemaId,

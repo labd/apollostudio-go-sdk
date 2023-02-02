@@ -116,8 +116,7 @@ func (c *Client) checkWorkflow(ctx context.Context, opts *ValidateOptions, workf
 
 		switch status {
 		case "FAILED":
-			// TODO: see if OperationError can be used here too.
-			return false, fmt.Errorf("Subgraph check failed %v", workflow)
+			return false, nil
 		case "PASSED":
 			return true, nil
 		case "PENDING":
@@ -130,6 +129,13 @@ func (c *Client) checkWorkflow(ctx context.Context, opts *ValidateOptions, workf
 }
 
 // ValidateSubGraph submits the proposed schema and returns the result of the async workflow.
+//
+// TODO: determine if we want to return more information about why
+// the validation failed. Passign false, error is not reasonable here
+// because there was no error, only a negative result.
+// If we want to return more info we coudl either:
+// return false, &SomeDetails{}, nil
+// return ValidationResult{}, nil <== probably better
 func (c *Client) ValidateSubGraph(ctx context.Context, opts *ValidateOptions) (bool, error) {
 	workflowId, err := c.submitSubgraphCheck(ctx, opts)
 	if err != nil {

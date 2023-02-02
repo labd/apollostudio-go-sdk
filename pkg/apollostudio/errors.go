@@ -7,11 +7,15 @@ type ApolloError struct {
 	Code    string
 }
 
+// OperationError contains Apollo Studio errors for a certain
+// Apollo Studio operation such as submitting the schema.
+// TODO: we probably get {Message, Code} errors back from validating
+// too? If not and submit specific, rename and move to submit.go.
 type OperationError struct {
 	Message      string
 	ApolloErrors []ApolloError
 }
 
 func (e *OperationError) Error() string {
-	return fmt.Sprintf("%s (%d errors)", e.Message, len(e.ApolloErrors))
+	return fmt.Sprintf("%s (%d apollo errors)", e.Message, len(e.ApolloErrors))
 }
