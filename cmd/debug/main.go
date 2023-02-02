@@ -6,7 +6,7 @@ import (
 	"os"
 
 	"github.com/joho/godotenv"
-	"github.com/labd/go-apollostudio-sdk/apollostudio"
+	"github.com/labd/go-apollostudio-sdk/pkg/apollostudio"
 )
 
 func main() {
