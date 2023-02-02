@@ -23,7 +23,7 @@ func main() {
 
 	client := apollostudio.NewClient(apollostudio.ClientOpts{APIKey: apiKey})
 
-	isValid, err := client.ValidateSubGraph(ctx, &apollostudio.ValidateOptions{
+	valid, err := client.ValidateSubGraph(ctx, &apollostudio.ValidateOptions{
 		SchemaID:       schemaId,
 		SchemaVariant:  schemaVariant,
 		SubGraphSchema: []byte(subGraphSchema),
@@ -34,7 +34,7 @@ func main() {
 		log.Fatal(err)
 	}
 
-	if !isValid {
+	if !valid {
 		// TODO: add more info, also see docs ValidateSubGraph.
 		fmt.Println("schema validation failed")
 		return
