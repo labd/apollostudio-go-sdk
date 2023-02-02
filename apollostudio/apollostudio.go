@@ -10,10 +10,10 @@ import (
 )
 
 type Client struct {
-	httpClient    *http.Client
-	graphqlClient *graphql.Client
-	key           string
-	body          string
+	httpClient *http.Client
+	gqlClient  *graphql.Client
+	key        string
+	body       string
 }
 
 type ValidateOptions struct {
@@ -32,14 +32,11 @@ type SubmitOptions struct {
 	SubGraphSchema []byte
 }
 
-type Config struct {
+type ClientOpts struct {
 	APIKey string
 }
 
-type headerTransport struct {
-	APIKey string
-}
-
+// XXX: why not <Something>Config
 type HistoricQueryParametersInput struct {
 	ExcludedClients               *string `json:"excludedClients"`
 	ExcludedOperationNames        *string `json:"excludedOperationNames"`
@@ -73,27 +70,31 @@ type SubgraphCheckAsyncInput struct {
 	SubgraphName          string                       `json:"subgraphName"`
 }
 
-func (t *headerTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+type HeaderTransport struct {
+	APIKey string
+}
+
+func (t *HeaderTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	req.Header.Add("x-api-key", t.APIKey)
 	return http.DefaultTransport.RoundTrip(req)
 }
 
-func NewClient(options Config) *Client {
-	httpClient := http.Client{Transport: &headerTransport{
-		APIKey: options.APIKey,
+func NewClient(opts ClientOpts) *Client {
+	httpClient := http.Client{Transport: &HeaderTransport{
+		APIKey: opts.APIKey,
 	}}
 
-	graphqlClient := graphql.NewClient("https://graphql.api.apollographql.com/api/graphql", &httpClient)
+	gqlClient := graphql.NewClient("https://graphql.api.apollographql.com/api/graphql", &httpClient)
 
 	return &Client{
-		graphqlClient: graphqlClient,
-		httpClient:    &httpClient,
+		gqlClient:  gqlClient,
+		httpClient: &httpClient,
 	}
-
 }
 
-func (c *Client) ValidateSubGraph(ctx context.Context, opts *ValidateOptions) (bool, error) {
-	var subgraphCheckMutation struct {
+// submitSubgraphCheck submits the proposed schema and returns a workflow id.
+func (c *Client) submitSubgraphCheck(ctx context.Context, opts *ValidateOptions) (string, error) {
+	type Mutation struct {
 		Graph struct {
 			Variant struct {
 				SubmitSubgraphCheckAsync struct {
@@ -111,11 +112,13 @@ func (c *Client) ValidateSubGraph(ctx context.Context, opts *ValidateOptions) (b
 						message string
 					} `graphql:"... on PlanError"`
 				} `graphql:"submitSubgraphCheckAsync(input: $input)"`
-			} `graphql:"variant(name: $name)"`
+			} "graphql:\"variant(name: $name)\""
 		} `graphql:"graph(id: $graph_id)"`
 	}
 
-	subgraphCheckVariables := map[string]interface{}{
+	var mutation Mutation
+
+	vars := map[string]interface{}{
 		"graph_id": graphql.ID(opts.SchemaID),
 		"name":     graphql.String(opts.SchemaVariant),
 		"input": SubgraphCheckAsyncInput{
@@ -128,22 +131,21 @@ func (c *Client) ValidateSubGraph(ctx context.Context, opts *ValidateOptions) (b
 		},
 	}
 
-	checkErr := c.graphqlClient.Mutate(context.Background(), &subgraphCheckMutation, subgraphCheckVariables)
-	if checkErr != nil {
-		return false, fmt.Errorf("failed to query apollo studio %v", checkErr.Error())
+	err := c.gqlClient.Mutate(ctx, &mutation, vars)
+	if err != nil {
+		return "", fmt.Errorf("failed to query apollo studio: %w", err)
 	}
 
-	workflowId := subgraphCheckMutation.Graph.Variant.SubmitSubgraphCheckAsync.CheckRequestSuccess.WorkflowID
+	workflowId := mutation.Graph.Variant.SubmitSubgraphCheckAsync.CheckRequestSuccess.WorkflowID
 	if workflowId == nil {
-		return false, fmt.Errorf("could not create check workflow in apollo studio")
+		return "", fmt.Errorf("could not create check workflow in apollo studio")
 	}
+	return *workflowId, nil
+}
 
-	subgraphCheckWorkflowVariables := map[string]interface{}{
-		"graph_id":   graphql.ID(opts.SchemaID),
-		"workflowId": graphql.ID(*workflowId),
-	}
-
-	type SubgraphCheckWorkflowQuery struct {
+// checkWorkflow polls the status of the of the workflow and returns the result when failed or passed.
+func (c *Client) checkWorkflow(ctx context.Context, opts *ValidateOptions, workflowId string) (bool, error) {
+	type Query struct {
 		Graph struct {
 			CheckWorkFlow struct {
 				Status    string
@@ -166,32 +168,55 @@ func (c *Client) ValidateSubGraph(ctx context.Context, opts *ValidateOptions) (b
 		} `graphql:"graph(id: $graph_id)"`
 	}
 
+	vars := map[string]interface{}{
+		"graph_id":   graphql.ID(opts.SchemaID),
+		"workflowId": graphql.ID(workflowId),
+	}
+
 	for {
-		var subgraphCheckWorkflowQuery SubgraphCheckWorkflowQuery
+		select {
+		case <-ctx.Done():
+			return false, ctx.Err()
+		default:
+		}
 
-		workflowErr := c.graphqlClient.Query(context.Background(), &subgraphCheckWorkflowQuery, subgraphCheckWorkflowVariables)
+		var query Query
 
-		if workflowErr != nil {
-			return false, fmt.Errorf("failed to query apollo studio %v", workflowErr.Error())
+		err := c.gqlClient.Query(ctx, &query, vars)
+		if err != nil {
+			return false, fmt.Errorf("failed to query apollo studio %w", err)
+		}
+
+		workflow := query.Graph.CheckWorkFlow
+		status := workflow.Status
+
+		switch status {
+		case "FAILED":
+			// TODO: pretty print (JSON maybe)
+			return false, fmt.Errorf("Subgraph check failed %v", workflow)
+		case "PASSED":
+			return true, nil
+		case "PENDING":
+		default:
+			fmt.Printf("WARNING: unknown workflow state %s\n", status)
 		}
 
 		time.Sleep(1 * time.Second)
+	}
+}
 
-		if subgraphCheckWorkflowQuery.Graph.CheckWorkFlow.Status == "FAILED" {
-			return false, fmt.Errorf("Subgraph check failed %v", subgraphCheckWorkflowQuery.Graph.CheckWorkFlow)
-		}
-
-		if subgraphCheckWorkflowQuery.Graph.CheckWorkFlow.Status == "PASSED" {
-			return true, nil
-		}
-
-		// if not FAILED or PASSED it is PENDING, so for loop is ran again
+// ValidateSubGraph submits the proposed schema and returns the result of the async workflow.
+func (c *Client) ValidateSubGraph(ctx context.Context, opts *ValidateOptions) (bool, error) {
+	workflowId, err := c.submitSubgraphCheck(ctx, opts)
+	if err != nil {
+		return false, err
 	}
 
+	return c.checkWorkflow(ctx, opts, workflowId)
 }
 
 func (c *Client) SubmitSubGraph(ctx context.Context, opts *SubmitOptions) (bool, error) {
-	var uploadSchemaMutation struct {
+	type Mutation struct {
 		Graph struct {
 			PublishSubgraph struct {
 				CompositionConfig struct {
@@ -199,7 +224,8 @@ func (c *Client) SubmitSubGraph(ctx context.Context, opts *SubmitOptions) (bool,
 				}
 				LaunchUrl     string
 				LaunchCliCopy string
-				Errors        []struct {
+				// TODO: make error a type so we can re-use when returning collected errors
+				Errors []struct {
 					Message string
 					Code    string
 				}
@@ -209,7 +235,9 @@ func (c *Client) SubmitSubGraph(ctx context.Context, opts *SubmitOptions) (bool,
 		} `graphql:"graph(id: $graph_id)"`
 	}
 
-	uploadSchemaVariables := map[string]interface{}{
+	var mutation Mutation
+
+	vars := map[string]interface{}{
 		"graph_id": graphql.ID(opts.SchemaID),
 		"subgraph": graphql.String(opts.SubGraphName),
 		"variant":  graphql.String(opts.SchemaVariant),
@@ -220,15 +248,15 @@ func (c *Client) SubmitSubGraph(ctx context.Context, opts *SubmitOptions) (bool,
 		"git_context": GitContextInput{},
 	}
 
-	checkErr := c.graphqlClient.Mutate(context.Background(), &uploadSchemaMutation, uploadSchemaVariables)
-	if checkErr != nil {
-		return false, fmt.Errorf("failed to query apollo studio %v", checkErr.Error())
+	err := c.gqlClient.Mutate(ctx, &mutation, vars)
+	if err != nil {
+		return false, fmt.Errorf("failed to query apollo studio %v", err.Error())
 	}
 
-	submitErr := uploadSchemaMutation.Graph.PublishSubgraph.Errors
-	hasErr := len(submitErr) > 0
-	if hasErr {
-		return false, fmt.Errorf("failed to submit schema %v", submitErr)
+	errors := mutation.Graph.PublishSubgraph.Errors
+	if len(errors) > 0 {
+		// TODO: make new error struct that contians "gqlErrors" or so
+		return false, fmt.Errorf("failed to submit schema %v", errors)
 	}
 
 	return true, nil

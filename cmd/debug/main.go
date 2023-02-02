@@ -20,11 +20,7 @@ func main() {
 
 	ctx := context.Background()
 
-	cfg := apollostudio.Config{
-		APIKey: apiKey,
-	}
-
-	client := apollostudio.NewClient(cfg)
+	client := apollostudio.NewClient(apollostudio.ClientOpts{APIKey: apiKey})
 
 	_, err := client.ValidateSubGraph(ctx, &apollostudio.ValidateOptions{
 		SchemaID:       schemaId,
