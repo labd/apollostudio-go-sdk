@@ -8,12 +8,146 @@ import (
 	"github.com/hasura/go-graphql-client"
 )
 
+const (
+	ValidationStatusFailed  ValidationStatus = "FAILED"
+	ValidationStatusPassed  ValidationStatus = "PASSED"
+	ValidationStatusPending ValidationStatus = "PENDING"
+	ValidationStatusBlocked ValidationStatus = "BLOCKED"
+)
+
+type ValidationStatus string
+
 type ValidateOptions struct {
 	SchemaID       string
 	SchemaVariant  string
 	APIKey         string
 	SubGraphName   string
 	SubGraphSchema []byte
+}
+
+type ValidationResult struct {
+	Status ValidationStatus
+	Tasks  []ValidationTask
+}
+
+type ValidationTask interface {
+	GetStatus() ValidationStatus
+	Changes() []string
+	Errors() []ApolloError
+}
+
+type ValidationOperationsCheckTask struct {
+	Status ValidationStatus
+	Result struct {
+		Changes []struct {
+			Severity    string
+			Code        string
+			Description string
+		}
+		NumberOfCheckedOperations int
+	}
+}
+
+type ValidationCompositionCheckTask struct {
+	Status ValidationStatus
+	Result struct {
+		GraphCompositionID string `graphql:"graphCompositionID"`
+		Errors             []struct {
+			Message   string
+			Code      string
+			Locations []struct {
+				Column int
+				Line   int
+			}
+		}
+	}
+}
+
+// NewValidationResult creates a new ValidationResult with the given status
+func NewValidationResult(s ValidationStatus) *ValidationResult {
+	return &ValidationResult{
+		Status: s,
+		Tasks:  make([]ValidationTask, 0),
+	}
+}
+
+// IsValid returns true if the proposed schema is valid
+func (vr ValidationResult) IsValid() bool {
+	return vr.Status == ValidationStatusPassed
+}
+
+// Errors returns a list of errors from all failed tasks
+func (vr ValidationResult) Errors() []ApolloError {
+	var errors []ApolloError
+	for _, task := range vr.Tasks {
+		if task.GetStatus() == ValidationStatusFailed {
+			errors = append(errors, task.Errors()...)
+		}
+	}
+	return errors
+}
+
+func (vr ValidationResult) Changes() []string {
+	var changes []string
+	for _, task := range vr.Tasks {
+		changes = append(changes, task.Changes()...)
+	}
+	return changes
+}
+
+func (t ValidationOperationsCheckTask) Errors() []ApolloError {
+	var errors []ApolloError
+	for _, c := range t.Result.Changes {
+		errors = append(
+			errors, ApolloError{
+				Message: fmt.Sprintf("[%s]: %s", c.Severity, c.Description),
+				Code:    c.Code,
+			},
+		)
+	}
+	return errors
+}
+
+func (t ValidationOperationsCheckTask) Changes() []string {
+	var changes []string
+	for _, c := range t.Result.Changes {
+		changes = append(changes, fmt.Sprintf("[%s]: %s", c.Severity, c.Description))
+	}
+
+	return changes
+}
+
+func (t ValidationOperationsCheckTask) GetStatus() ValidationStatus {
+	return t.Status
+}
+
+func (t ValidationCompositionCheckTask) Errors() []ApolloError {
+	var errors []ApolloError
+	for _, e := range t.Result.Errors {
+		locations := ""
+		for _, loc := range e.Locations {
+			locations += fmt.Sprintf("line %d, column %d", loc.Line, loc.Column)
+		}
+		msg := e.Message
+		if len(locations) > 0 {
+			msg = fmt.Sprintf("%s at %s", e.Message, locations)
+		}
+		errors = append(
+			errors, ApolloError{
+				Message: msg,
+				Code:    e.Code,
+			},
+		)
+	}
+	return errors
+}
+
+func (t ValidationCompositionCheckTask) Changes() []string {
+	return []string{}
+}
+
+func (t ValidationCompositionCheckTask) GetStatus() ValidationStatus {
+	return t.Status
 }
 
 // submitSubgraphCheck submits the proposed schema and returns a workflow id.
@@ -68,26 +202,19 @@ func (c *Client) submitSubgraphCheck(ctx context.Context, opts *ValidateOptions)
 	return *workflowId, nil
 }
 
-// checkWorkflow polls the status of the of the workflow and returns the result when failed or passed.
-func (c *Client) checkWorkflow(ctx context.Context, opts *ValidateOptions, workflowId string) (bool, error) {
+// checkWorkflow polls the status of the workflow and returns the result when failed or passed.
+func (c *Client) checkWorkflow(ctx context.Context, opts *ValidateOptions, workflowId string) (
+	*ValidationResult, error,
+) {
 	type Query struct {
 		Graph struct {
 			CheckWorkFlow struct {
 				Status    string
 				CreatedAt string
 				Tasks     []struct {
-					Typename            string `graphql:"__typename"`
-					OperationsCheckTask struct {
-						Status string
-						Result struct {
-							Changes []struct {
-								Severity    string
-								Code        string
-								Description string
-							}
-							NumberOfCheckedOperations int
-						}
-					} `graphql:"... on OperationsCheckTask"`
+					Typename             string                         `graphql:"__typename"`
+					OperationsCheckTask  ValidationOperationsCheckTask  `graphql:"... on OperationsCheckTask"`
+					CompositionCheckTask ValidationCompositionCheckTask `graphql:"... on CompositionCheckTask"`
 				}
 			} `graphql:"checkWorkflow(id: $workflowId)"`
 		} `graphql:"graph(id: $graph_id)"`
@@ -101,7 +228,7 @@ func (c *Client) checkWorkflow(ctx context.Context, opts *ValidateOptions, workf
 	for {
 		select {
 		case <-ctx.Done():
-			return false, ctx.Err()
+			return nil, ctx.Err()
 		default:
 		}
 
@@ -109,18 +236,31 @@ func (c *Client) checkWorkflow(ctx context.Context, opts *ValidateOptions, workf
 
 		err := c.gqlClient.Query(ctx, &query, vars)
 		if err != nil {
-			return false, fmt.Errorf("failed to query apollo studio %w", err)
+			return nil, fmt.Errorf("failed to query apollo studio %w", err)
 		}
 
 		workflow := query.Graph.CheckWorkFlow
-		status := workflow.Status
+		status := ValidationStatus(workflow.Status)
 
+		// we are setting task results not only when validation fails but also when it passes
+		// because we want to show the user what is going to change in the graph
 		switch status {
-		case "FAILED":
-			return false, nil
-		case "PASSED":
-			return true, nil
-		case "PENDING":
+		case ValidationStatusBlocked:
+			fallthrough
+		case ValidationStatusFailed:
+			fallthrough
+		case ValidationStatusPassed:
+			vr := NewValidationResult(status)
+			for _, task := range workflow.Tasks {
+				switch task.Typename {
+				case "OperationsCheckTask":
+					vr.Tasks = append(vr.Tasks, task.OperationsCheckTask)
+				case "CompositionCheckTask":
+					vr.Tasks = append(vr.Tasks, task.CompositionCheckTask)
+				}
+			}
+			return vr, nil
+		case ValidationStatusPending:
 		default:
 			fmt.Printf("WARNING: unknown workflow state %s\n", status)
 		}
@@ -130,15 +270,10 @@ func (c *Client) checkWorkflow(ctx context.Context, opts *ValidateOptions, workf
 }
 
 // ValidateSubGraph submits the proposed schema and returns the result of the async workflow.
-//
-// TODO: determine most idiomatic way to return validation results.
-//  1. (bool, error) simple but too little information (just a bool)
-//  2. (*ValidationResult, error) separates true errors from validation
-//  3. (error) can let error be a custom ValidationEror but requires errors.Is/As checking.
-func (c *Client) ValidateSubGraph(ctx context.Context, opts *ValidateOptions) (bool, error) {
+func (c *Client) ValidateSubGraph(ctx context.Context, opts *ValidateOptions) (*ValidationResult, error) {
 	workflowId, err := c.submitSubgraphCheck(ctx, opts)
 	if err != nil {
-		return false, err
+		return nil, err
 	}
 
 	return c.checkWorkflow(ctx, opts, workflowId)
