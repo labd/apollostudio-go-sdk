@@ -18,9 +18,6 @@ const (
 type ValidationStatus string
 
 type ValidateOptions struct {
-	SchemaID       string
-	SchemaVariant  string
-	APIKey         string
 	SubGraphName   string
 	SubGraphSchema []byte
 }
@@ -170,19 +167,19 @@ func (c *Client) submitSubgraphCheck(ctx context.Context, opts *ValidateOptions)
 						message string
 					} `graphql:"... on PlanError"`
 				} `graphql:"submitSubgraphCheckAsync(input: $input)"`
-			} "graphql:\"variant(name: $name)\""
+			} "graphql:\"variant(name: $variant)\""
 		} `graphql:"graph(id: $graph_id)"`
 	}
 
 	var mutation Mutation
 
 	vars := map[string]interface{}{
-		"graph_id": graphql.ID(opts.SchemaID),
-		"name":     graphql.String(opts.SchemaVariant),
+		"graph_id": graphql.ID(c.GraphID),
+		"variant":  graphql.String(c.Variant),
 		"input": SubgraphCheckAsyncInput{
 			Config:         HistoricQueryParametersInput{},
 			GitContext:     GitContextInput{},
-			GraphRef:       fmt.Sprintf("%s@%s", opts.SchemaID, opts.SchemaVariant),
+			GraphRef:       c.GraphRef,
 			IsSandbox:      false,
 			ProposedSchema: string(opts.SubGraphSchema),
 			SubgraphName:   opts.SubGraphName,
@@ -203,7 +200,7 @@ func (c *Client) submitSubgraphCheck(ctx context.Context, opts *ValidateOptions)
 }
 
 // checkWorkflow polls the status of the workflow and returns the result when failed or passed.
-func (c *Client) checkWorkflow(ctx context.Context, opts *ValidateOptions, workflowId string) (
+func (c *Client) checkWorkflow(ctx context.Context, workflowId string) (
 	*ValidationResult, error,
 ) {
 	type Query struct {
@@ -221,7 +218,7 @@ func (c *Client) checkWorkflow(ctx context.Context, opts *ValidateOptions, workf
 	}
 
 	vars := map[string]interface{}{
-		"graph_id":   graphql.ID(opts.SchemaID),
+		"graph_id":   graphql.ID(c.GraphID),
 		"workflowId": graphql.ID(workflowId),
 	}
 
@@ -271,10 +268,10 @@ func (c *Client) checkWorkflow(ctx context.Context, opts *ValidateOptions, workf
 
 // ValidateSubGraph submits the proposed schema and returns the result of the async workflow.
 func (c *Client) ValidateSubGraph(ctx context.Context, opts *ValidateOptions) (*ValidationResult, error) {
-	workflowId, err := c.submitSubgraphCheck(ctx, opts)
+	id, err := c.submitSubgraphCheck(ctx, opts)
 	if err != nil {
 		return nil, err
 	}
 
-	return c.checkWorkflow(ctx, opts, workflowId)
+	return c.checkWorkflow(ctx, id)
 }

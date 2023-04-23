@@ -3,13 +3,10 @@ package apollostudio
 import (
 	"context"
 	"fmt"
-
 	"github.com/hasura/go-graphql-client"
 )
 
 type SubmitOptions struct {
-	SchemaID       string
-	SchemaVariant  string
 	SubGraphName   string
 	SubGraphSchema []byte
 	SubGraphURL    string
@@ -26,25 +23,6 @@ type SubmitSubgraphResult struct {
 	WasCreated     bool
 }
 
-// OperationError contains Apollo Studio errors for a certain
-// Apollo Studio operation such as submitting the schema.
-type OperationError struct {
-	Message      string
-	ApolloErrors []ApolloError
-}
-
-func (e *OperationError) Error() string {
-	return fmt.Sprintf("%s (%d apollo errors)", e.Message, len(e.ApolloErrors))
-}
-
-func (e *OperationError) Print() {
-	fmt.Println(e.Error())
-	fmt.Println("Apollo errors:")
-	for i, err := range e.ApolloErrors {
-		fmt.Printf("#%d: code: %s, message: %s\n", i, err.Code, err.Message)
-	}
-}
-
 func (c *Client) SubmitSubGraph(ctx context.Context, opts *SubmitOptions) (*SubmitSubgraphResult, error) {
 	type Mutation struct {
 		Graph struct {
@@ -55,9 +33,9 @@ func (c *Client) SubmitSubGraph(ctx context.Context, opts *SubmitOptions) (*Subm
 	var mutation Mutation
 
 	vars := map[string]interface{}{
-		"graph_id": graphql.ID(opts.SchemaID),
+		"graph_id": graphql.ID(c.GraphID),
 		"subgraph": graphql.String(opts.SubGraphName),
-		"variant":  graphql.String(opts.SchemaVariant),
+		"variant":  graphql.String(c.Variant),
 		"revision": graphql.String(""),
 		"schema": PartialSchemaInput{
 			Sdl: string(opts.SubGraphSchema),
