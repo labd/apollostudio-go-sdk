@@ -14,7 +14,7 @@ import (
 func handleErr(err error) {
 	var opErr *apollostudio.OperationError
 	if errors.As(err, &opErr) {
-		opErr.Print()
+		fmt.Println(opErr.Error())
 		os.Exit(1)
 	}
 	log.Fatal(err)
@@ -23,41 +23,83 @@ func handleErr(err error) {
 func main() {
 	godotenv.Load()
 
-	apiKey := os.Getenv("API_KEY")
-	schemaId := os.Getenv("SCHEMA_ID")
-	schemaVariant := os.Getenv("SCHEMA_VARIANT")
-	subGraphSchema := os.Getenv("SUB_GRAPH_SCHEMA")
-	subGraphName := os.Getenv("SUB_GRAPH_NAME")
+	apiKey := os.Getenv("APOLLO_API_KEY")
+	graphRef := os.Getenv("APOLLO_GRAPH_REF")
+	subGraphSchema := os.Getenv("APOLLO_SUB_GRAPH_SCHEMA")
+	subGraphName := os.Getenv("APOLLO_SUB_GRAPH_NAME")
+	subGraphURL := os.Getenv("APOLLO_SUB_GRAPH_URL")
 
 	ctx := context.Background()
-
-	client := apollostudio.NewClient(apollostudio.ClientOpts{APIKey: apiKey})
-
-	valid, err := client.ValidateSubGraph(ctx, &apollostudio.ValidateOptions{
-		SchemaID:       schemaId,
-		SchemaVariant:  schemaVariant,
-		SubGraphSchema: []byte(subGraphSchema),
-		SubGraphName:   subGraphName,
-	})
+	client, err := apollostudio.NewClient(
+		apollostudio.ClientOpts{
+			APIKey:   apiKey,
+			GraphRef: graphRef,
+		},
+	)
 
 	if err != nil {
 		handleErr(err)
 	}
 
-	if !valid {
-		// TODO: add more info, also see docs ValidateSubGraph.
-		fmt.Println("schema validation failed")
+	b, err := client.GetLatestSchemaBuild(ctx)
+
+	if err != nil {
+		handleErr(err)
+	}
+
+	for _, v := range b.Result.BuildFailure.ErrorMessages {
+		fmt.Println(v.Code, v.Message)
+	}
+
+	vr, err := client.ValidateSubGraph(
+		ctx, &apollostudio.ValidateOptions{
+			SubGraphSchema: []byte(subGraphSchema),
+			SubGraphName:   subGraphName,
+		},
+	)
+
+	if err != nil {
+		handleErr(err)
+	}
+
+	if !vr.IsValid() {
+		fmt.Println("schema is not valid")
+		fmt.Println(vr.Errors())
 		return
 	}
 
-	if err := client.SubmitSubGraph(ctx, &apollostudio.SubmitOptions{
-		SchemaID:       schemaId,
-		SchemaVariant:  schemaVariant,
-		SubGraphName:   subGraphName,
-		SubGraphSchema: []byte(subGraphSchema),
-	}); err != nil {
+	fmt.Println("schema validated")
+	fmt.Println(vr.Changes())
+
+	sr, err := client.SubmitSubGraph(
+		ctx, &apollostudio.SubmitOptions{
+			SubGraphName:   subGraphName,
+			SubGraphSchema: []byte(subGraphSchema),
+			SubGraphURL:    subGraphURL,
+		},
+	)
+
+	if err != nil {
 		handleErr(err)
 	}
 
 	fmt.Println("schema submitted")
+	fmt.Println(sr)
+
+	rr, err := client.GetSubGraph(ctx, subGraphName)
+
+	if err != nil {
+		handleErr(err)
+	}
+
+	fmt.Println("schema read")
+	fmt.Println(rr.Revision)
+
+	err = client.RemoveSubGraph(ctx, subGraphName)
+
+	if err != nil {
+		handleErr(err)
+	}
+
+	fmt.Println("schema deleted")
 }
