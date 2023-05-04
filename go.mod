@@ -1,4 +1,4 @@
-module github.com/labd/go-apollostudio-sdk
+module github.com/labd/apollostudio-go-sdk
 
 go 1.19
 

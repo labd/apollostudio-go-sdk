@@ -8,7 +8,7 @@ import (
 	"os"
 
 	"github.com/joho/godotenv"
-	"github.com/labd/go-apollostudio-sdk/pkg/apollostudio"
+	"github.com/labd/apollostudio-go-sdk/pkg/apollostudio"
 )
 
 func handleErr(err error) {
