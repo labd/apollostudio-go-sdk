@@ -1,6 +1,7 @@
 package apollostudio
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 )
@@ -30,6 +31,7 @@ func (e *OperationError) Error() string {
 // an error, but the subgraph will still be created. As a result, the
 // federation schema remains unaffected, while the subgraph coexists with errors.
 func IsOperationError(err error) bool {
-	_, ok := err.(*OperationError)
+	var operationError *OperationError
+	ok := errors.As(err, &operationError)
 	return ok
 }
