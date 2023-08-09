@@ -1,4 +1,4 @@
-# Amplience GO SDK
+# Apollo Studio GO SDK
 
 Go SDK for [Apollo Studio](https://studio.apollographql.com/).
 
