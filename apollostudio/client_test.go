@@ -21,13 +21,13 @@ func TestValidateGraphRef(t *testing.T) {
 }
 
 func TestGraphRefGetGraphId(t *testing.T) {
-	grapRef := GraphRef("foo@bar")
+	graphRef := GraphRef("foo@bar")
 
-	assert.Equal(t, "foo", grapRef.getGraphId())
+	assert.Equal(t, "foo", graphRef.getGraphId())
 }
 
 func TestGraphRefGetVariant(t *testing.T) {
-	grapRef := GraphRef("foo@bar")
+	graphRef := GraphRef("foo@bar")
 
-	assert.Equal(t, "bar", grapRef.getVariant())
+	assert.Equal(t, "bar", graphRef.getVariant())
 }

@@ -1,20 +1,54 @@
-# Apollo Studio GO SDK
+# Apollo Studio Go SDK
 
 Go SDK for [Apollo Studio](https://studio.apollographql.com/).
 
-## Development
+## Installation
 
-To test the API, run `cmd/debug/main.go` file with your own Apollo studio graph credentials.
-
+```bash 
+go get github.com/labd/apollostudio-go-sdk
 ```
-export APOLLO_API_KEY=your_api_key
-export APOLLO_GRAPH_REF=your_graph_ref
-export APOLLO_SUB_GRAPH_SCHEMA=your_sub_graph_schema
-export APOLLO_SUB_GRAPH_NAME=your_sub_graph_name
-export APOLLO_SUB_GRAPH_URL=your_sub_graph_url
 
-go build ./cmd/debug
-./debug -h
+## Usage
+
+```go
+package main
+
+import (
+	"context"
+	"github.com/labd/apollostudio-go-sdk/apollostudio"
+)
+
+func main() {
+	key := "your-api-key"
+	ref := "your-schema-reference"
+
+	client, err := apollostudio.NewClient(key, ref)
+	if err != nil {
+		panic(err)
+	}
+
+	_, _ := client.SubmitSubGraph(
+		context.Background(),
+		&apollostudio.SubmitOptions{
+			SubGraphSchema: []byte("schema { query: Query } type Query { hello: String }"),
+			SubGraphName:   "my-subgraph",
+			SubGraphURL:    "https://my-subgraph.com/graphql",
+		},
+	)
+}
+```
+
+The client allows for several additional options to be set, which can extend its functionality.
+
+```go
+var clientOpts = []apollostudio.ClientOpt{
+    apollostudio.WithHttpClient(http.DefaultClient),
+    apollostudio.WithDebug(true),
+    apollostudio.WithUrl("https://studio.apollographql.com/api/graphql"),                       
+}
+
+client, err := apollostudio.NewClient(key, ref, clientOpts...)
+
 ```
 
 ## Contributing
