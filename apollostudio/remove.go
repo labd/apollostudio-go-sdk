@@ -19,9 +19,9 @@ func (c *Client) RemoveSubGraph(ctx context.Context, name string) error {
 	var mutation Mutation
 
 	vars := map[string]interface{}{
-		"graph_id": graphql.ID(c.GraphID),
-		"subgraph": graphql.String(name),
-		"variant":  graphql.String(c.Variant),
+		"graph_id": graphql.ID(c.GraphRef.getGraphId()),
+		"subgraph": name,
+		"variant":  c.GraphRef.getVariant(),
 	}
 
 	err := c.gqlClient.Mutate(ctx, &mutation, vars)

@@ -33,17 +33,17 @@ func (c *Client) SubmitSubGraph(ctx context.Context, opts *SubmitOptions) (*Subm
 	var mutation Mutation
 
 	vars := map[string]interface{}{
-		"graph_id": graphql.ID(c.GraphID),
-		"subgraph": graphql.String(opts.SubGraphName),
-		"variant":  graphql.String(c.Variant),
-		"revision": graphql.String(""),
+		"graph_id": graphql.ID(c.GraphRef.getGraphId()),
+		"subgraph": opts.SubGraphName,
+		"variant":  c.GraphRef.getVariant(),
+		"revision": "",
 		"schema": PartialSchemaInput{
 			Sdl: string(opts.SubGraphSchema),
 		},
 		"git_context": GitContextInput{},
 		// URL is necessary if sub graph does not exist and is created
 		// during the submission
-		"url": graphql.String(opts.SubGraphURL),
+		"url": opts.SubGraphURL,
 	}
 
 	err := c.gqlClient.Mutate(ctx, &mutation, vars)

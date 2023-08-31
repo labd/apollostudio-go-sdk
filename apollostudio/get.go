@@ -62,9 +62,9 @@ func (c *Client) GetSubGraph(ctx context.Context, name string) (*SubGraphResult,
 	var query Query
 
 	vars := map[string]interface{}{
-		"graph_id": graphql.ID(c.GraphID),
+		"graph_id": graphql.ID(c.GraphRef.getGraphId()),
 		"subgraph": graphql.ID(name),
-		"variant":  graphql.String(c.Variant),
+		"variant":  c.GraphRef.getVariant(),
 	}
 
 	err := c.gqlClient.Query(ctx, &query, vars)

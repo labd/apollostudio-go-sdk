@@ -1,0 +1,3 @@
+kind: Added
+body: Added additional client options to allow overriding of default http client
+time: 2023-08-30T14:42:59.707696257+02:00

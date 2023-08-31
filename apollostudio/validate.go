@@ -174,12 +174,12 @@ func (c *Client) submitSubgraphCheck(ctx context.Context, opts *ValidateOptions)
 	var mutation Mutation
 
 	vars := map[string]interface{}{
-		"graph_id": graphql.ID(c.GraphID),
-		"variant":  graphql.String(c.Variant),
+		"graph_id": graphql.ID(c.GraphRef.getGraphId()),
+		"variant":  c.GraphRef.getVariant(),
 		"input": SubgraphCheckAsyncInput{
 			Config:         HistoricQueryParametersInput{},
 			GitContext:     GitContextInput{},
-			GraphRef:       c.GraphRef,
+			GraphRef:       string(c.GraphRef),
 			IsSandbox:      false,
 			ProposedSchema: string(opts.SubGraphSchema),
 			SubgraphName:   opts.SubGraphName,
@@ -218,7 +218,7 @@ func (c *Client) checkWorkflow(ctx context.Context, workflowId string) (
 	}
 
 	vars := map[string]interface{}{
-		"graph_id":   graphql.ID(c.GraphID),
+		"graph_id":   graphql.ID(c.GraphRef.getGraphId()),
 		"workflowId": graphql.ID(workflowId),
 	}
 
