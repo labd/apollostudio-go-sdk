@@ -1,7 +1,6 @@
 package apollostudio
 
 import (
-	"errors"
 	"fmt"
 	"net/http"
 	"strings"
@@ -63,11 +62,7 @@ func isValidGraphRef(graphRef string) bool {
 
 	p := strings.Split(graphRef, "@")
 
-	if len(p) != 2 {
-		return false
-	}
-
-	return true
+	return len(p) == 2
 }
 
 func (g *GraphRef) getGraphId() string {
@@ -96,7 +91,7 @@ func NewClient(apiKey string, graphRef string, opts ...ClientOpt) (*Client, erro
 	}
 
 	if !isValidGraphRef(graphRef) {
-		return nil, errors.New(fmt.Sprintf("Provided invalid graph ref. Expected ref in format *@*, received %s", graphRef))
+		return nil, fmt.Errorf("Provided invalid graph ref. Expected ref in format *@*, received %s", graphRef)
 	}
 
 	gqlClient := graphql.NewClient(settings.url, settings.httpClient)
